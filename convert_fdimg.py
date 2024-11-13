@@ -51,26 +51,20 @@ for disk in disks:
             #   sectoroffs.append(unpack("<I", file.read(4))[0])
             sectoroffs += unpack(f"<{numsectors}I", file.read(numsectors * 4))
 
-            if diskformat == "d88":
-                tracksize = 0
-                for sectoroff in sectoroffs:
-                    file.seek(sectoroff)
-                    head = file.read(12)
-                    c, h, s, l, _, datasize = unpack("<BBBBII", head)
-                    if datasize >= 0xFFFF:
-                        exit("Invalid sector length found")
-                    else:
-                        outputdata += pack("<BBBBH8xH", c, h, s, l, numsectors, datasize)
-                        outputdata += file.read(datasize)
-                    tracksize += datasize + 0x10
-                tracksizes.append(tracksize)
-
-            elif diskformat in ["dsk", "fdi"]:
-                for sectoroff in sectoroffs:
-                    file.seek(sectoroff)
-                    head = file.read(12)
-                    sectorsize = unpack("<I", head[-4:])[0]
-                    outputdata += file.read(sectorsize)
+            tracksize = 0
+            for sectoroff in sectoroffs:
+                file.seek(sectoroff)
+                c, h, s, l, _, datasize = unpack("<BBBBII", file.read(12))
+                if datasize >= 0xFFFF:
+                    exit("Invalid sector length found")
+                else:
+                    if diskformat == "d88":
+                        outputdata += pack(
+                            "<BBBBH8xH", c, h, s, l, numsectors, datasize
+                        )
+                    outputdata += file.read(datasize)
+                tracksize += datasize + 0x10
+            tracksizes.append(tracksize)
 
     if diskformat == "d88":
         output_header = pack("26xBB", readonly, disktype)
@@ -98,8 +92,22 @@ for disk in disks:
             disk.write(outputdata)
 
     elif diskformat == "fdi":
+        # 0x90 = 1.2M
+        # 0x30 = 1.44M
+        # 0x10 = 640K/720K
+        fdd_type = 0x90
+        header_size = 32
+        data_size = len(outputdata)
+        bps = 0x400
         output_header = pack(
-            "<IIIIIIII4064x", 0, 0x90, 0x1000, 0x134000, 0x400, 8, 2, 77
+            f"<4xIIIIIII{header_size - 32}x",
+            fdd_type,
+            header_size,
+            data_size,
+            bps,
+            s,
+            h + 1,
+            c + 1,
         )
         with open(os.path.join(workingfolder, f"disk_{disk}.fdi"), "wb") as disk:
             disk.write(output_header + outputdata)
