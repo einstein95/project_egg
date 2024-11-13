@@ -20,7 +20,7 @@ CHUNK_SIZE = 0x100
 
 def read_dstring(fp, length):
     s = fp.read(length).split(b"\x00")[0]
-    return s.decode("ascii")
+    return s.decode("latin-1")
 
 
 def DUMP(EXE_NAME, file, CHUNKS, KEY=b"", METHOD=1):
