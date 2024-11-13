@@ -1,6 +1,12 @@
+"""
+Usage: eggdata.py <input.exe>
+
+Writes output to a subfolder called `out`. This script extracts embedded
+data from a Project EGG executable.
+"""
+
 import hashlib
 import os
-from token import NAME
 import zlib
 from io import BytesIO
 from struct import pack, unpack
@@ -13,8 +19,8 @@ CHUNK_SIZE = 0x100
 
 
 def read_dstring(fp, length):
-    s = fp.read(length)
-    return s.decode("latin-1").split("\0")[0]
+    s = fp.read(length).split(b"\x00")[0]
+    return s.decode("ascii")
 
 
 def DUMP(EXE_NAME, file, CHUNKS, KEY=b"", METHOD=1):
@@ -39,6 +45,7 @@ def DUMP(EXE_NAME, file, CHUNKS, KEY=b"", METHOD=1):
 
 
 def DUMP2(file):
+    # TODO: Make this function work
     tmp = file.tell()
     SIZE = file.seek(0, 2)
     file.seek(tmp)
@@ -128,8 +135,8 @@ if __name__ == "__main__":
                         ].data.struct.OffsetToData
                         data_size = entry.directory.entries[0].data.struct.Size
 
-        config = pe.get_memory_mapped_image()[config_offset : config_offset + config_size]  # type: ignore
-        data = pe.get_memory_mapped_image()[data_offset : data_offset + data_size]  # type: ignore
+        config = pe.get_memory_mapped_image()[config_offset: config_offset + config_size]  # type: ignore
+        data = pe.get_memory_mapped_image()[data_offset: data_offset + data_size]  # type: ignore
 
         configf = BytesIO(config)
         assert configf.read(8) == b"EGGDATA "
@@ -154,4 +161,4 @@ if __name__ == "__main__":
         )
         DUMP_EXTRACT(BytesIO(decrypted_data))
     else:
-        print("unsupported")
+        print("This version is currently unsupported.")
