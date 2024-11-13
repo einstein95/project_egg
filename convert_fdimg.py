@@ -5,18 +5,21 @@ from struct import pack, unpack
 from sys import argv, exit
 
 diskformat = argv[1]
+try:
+    workingfolder = argv[2]
+except IndexError:
+    workingfolder = "."
 disks = []
 
-tracksizes = []
-
-for filename in os.listdir("."):
+for filename in os.listdir(workingfolder):
     match = re.search(r"EGGFDIMG(\d+)-INF", filename)
     if match:
         disks.append(match.group(1))
 
 for disk in disks:
+    tracksizes = []
     outputdata = b""
-    with open(f"EGGFDIMG{disk}-INF", "rb") as inffile:
+    with open(os.path.join(workingfolder, f"EGGFDIMG{disk}-INF"), "rb") as inffile:
         inffile.seek(0x200)
         sha1hash = inffile.read(0x10)
         _, readonly, numtracks = unpack("<III", inffile.read(12))
@@ -31,37 +34,37 @@ for disk in disks:
         disktype = 0
 
     for tracknum in range(numtracks):
-        if not os.path.exists(f"EGGFDIMG{disk}-{tracknum}"):
-            print(f"WARNING: EGGFDIMG{disk}-{tracknum} NOT FOUND")
+        if not os.path.exists(
+            os.path.join(workingfolder, f"EGGFDIMG{disk}-{tracknum}")
+        ):
+            # print(f"WARNING: EGGFDIMG{disk}-{tracknum} NOT FOUND")
             if diskformat == "d88":
                 tracksizes.append(0)
             continue
 
         filename = f"EGGFDIMG{disk}-{tracknum}"
-        with open(filename, "rb") as file:
-            # print(filename)
+        with open(os.path.join(workingfolder, filename), "rb") as file:
+            print(filename)
             numsectors = unpack("<I", file.read(4))[0]
-            sectoroffs = []
-            for _ in range(numsectors):
-                sectoroff = unpack("<I", file.read(4))[0]
-                sectoroffs.append(sectoroff)
+            sectoroffs: list[int] = []
+            # for _ in range(numsectors):
+            #   sectoroffs.append(unpack("<I", file.read(4))[0])
+            sectoroffs += unpack(f"<{numsectors}I", file.read(numsectors * 4))
 
             if diskformat == "d88":
                 tracksize = 0
                 for sectoroff in sectoroffs:
                     file.seek(sectoroff)
                     head = file.read(12)
-                    # a, b, c = unpack('<III', head)
-                    # print(f'{a:08x}\t{b:08x}\t{c:08x}')
-                    sectorsize = unpack("<I", head[-4:])[0]
-                    if sectorsize >= 0xFFFF:
+                    c, h, s, l, _, datasize = unpack("<BBBBII", head)
+                    if datasize >= 0xFFFF:
                         exit("Invalid sector length found")
                     else:
-                        outputdata += head[:4]
-                        outputdata += pack("<B9xH", numsectors, sectorsize)
-                        outputdata += file.read(sectorsize)
-                    tracksize += sectorsize + 0x10
+                        outputdata += pack("<BBBBH8xH", c, h, s, l, numsectors, datasize)
+                        outputdata += file.read(datasize)
+                    tracksize += datasize + 0x10
                 tracksizes.append(tracksize)
+
             elif diskformat in ["dsk", "fdi"]:
                 for sectoroff in sectoroffs:
                     file.seek(sectoroff)
@@ -87,16 +90,16 @@ for disk in disks:
 
         output_header += b"\x00" * abs(startoff - len(output_header))
 
-        with open(f"disk_{disk}.d88", "wb") as disk:
+        with open(os.path.join(workingfolder, f"disk_{disk}.d88"), "wb") as disk:
             disk.write(output_header + outputdata)
 
     elif diskformat == "dsk":
-        with open(f"disk_{disk}.dsk", "wb") as disk:
+        with open(os.path.join(workingfolder, f"disk_{disk}.dsk"), "wb") as disk:
             disk.write(outputdata)
 
     elif diskformat == "fdi":
         output_header = pack(
             "<IIIIIIII4064x", 0, 0x90, 0x1000, 0x134000, 0x400, 8, 2, 77
         )
-        with open(f"disk_{disk}.fdi", "wb") as disk:
+        with open(os.path.join(workingfolder, f"disk_{disk}.fdi"), "wb") as disk:
             disk.write(output_header + outputdata)

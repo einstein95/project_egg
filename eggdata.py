@@ -112,8 +112,11 @@ if __name__ == "__main__":
         d = f.read()
         if b"\x63\x59\x88\x18" in d:
             DUMP2_TYPE = 1
-        if b"\x33\x53\x93\x63\xA3\xC3\x35\x55\x95\x65\xA5\xC5\x36\x56\x96\x66" in d:
+        elif b"\x33\x53\x93\x63\xA3\xC3\x35\x55\x95\x65\xA5\xC5\x36\x56\x96\x66" in d:
             DUMP2_TYPE = 2
+        elif b"EGGDATA" not in d:
+            print("This version is currently unsupported.")
+            exit()
 
     os.makedirs("out", exist_ok=True)
     pe = pefile.PE(exe_file, fast_load=True)
