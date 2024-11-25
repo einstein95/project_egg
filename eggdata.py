@@ -103,8 +103,8 @@ def DUMP_EXTRACT(file):
 
 
 if __name__ == "__main__":
-    exe_file = Path(argv[1]).stem
-    EXE_NAME = exe_file.encode("utf-8")
+    exe_file = argv[1]
+    EXE_NAME = Path(exe_file).stem.encode("utf-8")
 
     DUMP2_TYPE = 0
     with open(exe_file, "rb") as f:
