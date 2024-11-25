@@ -9,6 +9,7 @@ import hashlib
 import os
 import zlib
 from io import BytesIO
+from pathlib import Path
 from struct import pack, unpack
 from sys import argv
 
@@ -102,10 +103,8 @@ def DUMP_EXTRACT(file):
 
 
 if __name__ == "__main__":
-    exe_file = argv[1]
+    exe_file = Path(argv[1]).stem
     EXE_NAME = exe_file.encode("utf-8")
-    if b".exe" in EXE_NAME.lower():
-        EXE_NAME = EXE_NAME[:-4]
 
     DUMP2_TYPE = 0
     with open(exe_file, "rb") as f:
