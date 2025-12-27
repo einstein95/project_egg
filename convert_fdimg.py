@@ -39,6 +39,7 @@ for disk in disks:
             # print(f"WARNING: EGGFDIMG{disk}-{tracknum} NOT FOUND")
             if diskformat == "d88":
                 tracksizes.append(0)
+
             continue
 
         filename = f"EGGFDIMG{disk}-{tracknum}"
@@ -50,30 +51,39 @@ for disk in disks:
             for sectoroff in sectoroffs:
                 file.seek(sectoroff)
                 c, h, s, l, _, datasize = unpack("<BBBBII", file.read(12))
-                assert datasize < 0xFFFF, "Invalid sector length found"
+                if datasize > 0xFFFF:
+                    raise ValueError("Invalid sector length found")
+
                 if diskformat == "d88":
                     outputdata += pack("<BBBBH8xH", c, h, s, l, numsectors, datasize)
+
                 outputdata += file.read(datasize)
                 tracksize += datasize + 0x10
             tracksizes.append(tracksize)
 
     if diskformat == "d88":
         numtracks = max(numtracks, 164)
-        d88_header = [pack("26xBB", readonly, disktype)]
-        startoff = 0x20 + numtracks * 4 + ((numtracks * 4) % 16)
-        d88_header.append(pack("<I", len(outputdata) + startoff))
-        # Stupid hack but it works
-        offset = startoff - tracksizes[0]
-        d88_header.extend(
-            pack("<I", offset if tracksize > 0 else 0)
-            for tracksize in tracksizes
-            if (offset := offset + tracksize if tracksize > 0 else offset)
-        )
+        track_table_size = numtracks * 4
+        alignment_padding = track_table_size % 16
+        startoff = 0x20 + track_table_size + alignment_padding
 
-        d88_header.append(b"\x00" * (startoff - sum(len(h) for h in d88_header)))
+        track_offsets = []
+        current_offset = startoff
 
-        with open(os.path.join(workingfolder, f"disk_{disk}.d88"), "wb") as disk:
-            disk.write(b"".join(d88_header) + outputdata)
+        for tracksize in tracksizes:
+            track_offsets.append(pack("<I", current_offset if tracksize > 0 else 0))
+            if tracksize > 0:
+                current_offset += tracksize
+
+        d88_header = pack("26xBB", readonly, disktype)
+        d88_header += pack("<I", len(outputdata) + startoff)
+        d88_header += b"".join(track_offsets)
+        d88_header += b"\x00" * (startoff - len(d88_header))
+
+        # Write complete disk image
+        output_path = os.path.join(workingfolder, f"disk_{disk}.d88")
+        with open(output_path, "wb") as disk:
+            disk.write(d88_header + outputdata)
 
     elif diskformat == "dsk":
         with open(os.path.join(workingfolder, f"disk_{disk}.dsk"), "wb") as disk:
