@@ -84,7 +84,7 @@ def build_d88_header(write_protected: bool) -> bytearray:
 
 def extract_disk(
     data: bytes, disk_num: int, disk_info: SortedDict, title: str
-) -> bytes:
+) -> tuple[str, bytes]:
     """Extract a single disk image from PDS data."""
     write_protected = f"{disk_num}r" in disk_info
     out_data = build_d88_header(write_protected)
@@ -154,9 +154,8 @@ def extract_disk(
     # Display disk info
     disk_key = f"{disk_num}{'r' if write_protected else ''}"
     disk_label = disk_info.get(disk_key, "No label")
-    print(f"\n  → {title} - {disk_label}")
 
-    return bytes(out_data)
+    return f"{title} - {disk_label}", bytes(out_data)
 
 
 def egg_extract_pds2d88(input_file: str) -> None:
@@ -211,10 +210,12 @@ def egg_extract_pds2d88(input_file: str) -> None:
             continue
 
         # Extract disk image
-        disk_data = extract_disk(data[disk_start:], disk_num, disk_info, title)
+        disk_name, disk_data = extract_disk(
+            data[disk_start:], disk_num, disk_info, title
+        )
 
         # Write output file
-        output_file = f"disk_{disk_num}.d88"
+        output_file = f"{disk_name}.d88"
         Path(output_file).write_bytes(disk_data)
         print(f"  Wrote {output_file} ({len(disk_data)} bytes)\n")
 
