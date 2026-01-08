@@ -4,23 +4,6 @@ import os
 import re
 from struct import pack, unpack
 
-# FDC status codes if they ever need implementing
-# 10h  the data has DDAM
-# 20h  ?
-# 30h  warning 'try to access over final track'
-# 40h  Fault signal from FDD,Recalibrate error
-# 50h  time out error
-# 60h  FDD not ready
-# 70h  detected write protected
-# 80h  ?
-# 90h  ?
-# A0h  ID CRC error
-# B0h  Data CRC error
-# C0h  cannot find specified sector in the track
-# D0h  cannot find specified cylinder
-# E0h  cannot find Address Mark
-# F0h  cannot find DAM or DDAM when reading datas.
-
 parser = argparse.ArgumentParser()
 parser.add_argument("diskformat")
 parser.add_argument("-d", "--directory", default=".")
@@ -84,12 +67,12 @@ for disk in disks:
             tracksize = 0
             for i, sectoroff in enumerate(sectoroffs):
                 file.seek(sectoroff)
-                c, h, s, l, density, ddam, unk, datasize = unpack(
-                    "<BBBBBBHI", file.read(12)
+                c, h, s, l, density, ddam, fdc_code, unk, datasize = unpack(
+                    "<BBBBBBBBI", file.read(12)
                 )
                 if debug:
                     print(
-                        f"[DEBUG] S{i:02X}: C={c:02X}, H={h}, S={s:02X}, L={l}, Density={density}, DDAM={ddam}, datasize={datasize}"
+                        f"[DEBUG] S{i:02X}: C={c:02X}, H={h}, S={s:02X}, L={l}, Density={density}, DDAM={ddam}, FDC_code={fdc_code:02X}, datasize={datasize}"
                     )
                 if datasize > 0xFFFF:
                     raise ValueError("Invalid sector length found")
@@ -115,7 +98,8 @@ for disk in disks:
                         "H"  # 04h-05h number of sectors
                         "B"  # 06h Density (00h=double; 40h=single)
                         "B"  # 07h DDAM
-                        "6x"
+                        "B"  # 08h FDC code
+                        "5x"
                         "H",  # 0Eh Data size
                         c,
                         h,
@@ -124,6 +108,7 @@ for disk in disks:
                         numsectors,
                         0x40 if not density else 0,
                         0x10 if ddam else 0,
+                        fdc_code,
                         datasize,
                     )
 
