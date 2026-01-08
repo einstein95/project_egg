@@ -4,6 +4,23 @@ import os
 import re
 from struct import pack, unpack
 
+# FDC status codes if they ever need implementing
+# 10h  the data has DDAM
+# 20h  ?
+# 30h  warning 'try to access over final track'
+# 40h  Fault signal from FDD,Recalibrate error
+# 50h  time out error
+# 60h  FDD not ready
+# 70h  detected write protected
+# 80h  ?
+# 90h  ?
+# A0h  ID CRC error
+# B0h  Data CRC error
+# C0h  cannot find specified sector in the track
+# D0h  cannot find specified cylinder
+# E0h  cannot find Address Mark
+# F0h  cannot find DAM or DDAM when reading datas.
+
 parser = argparse.ArgumentParser()
 parser.add_argument("diskformat")
 parser.add_argument("-d", "--directory", default=".")
