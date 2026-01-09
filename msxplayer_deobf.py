@@ -46,7 +46,10 @@ for fn in files:
         continue
 
     print(data[:16].hex())
-    if not operation in operations or len(data) % 16 != 0:
+    if operation in operations and len(data) % 16 != 0:
+        print(f"[WARNING] File {fn} size not divisable by 16")
+        xor_key, shift = operations[operation]
+    elif not operation in operations or len(data) % 16 != 0:
         print(
             f"Unknown operation {operation} in file {fn}, using default deobfuscation"
         )
