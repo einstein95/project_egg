@@ -127,126 +127,139 @@ def DUMP_EXTRACT(file: BytesIO, dump_folder: str = "out") -> None:
             file.seek(tmp)
 
 
-if __name__ == "__main__":
-    for exe_file in argv[1:]:
-        EXE_STEM = Path(exe_file).stem
-        EXE_NAME = EXE_STEM.encode("utf-8")
-        dump_folder = f"{EXE_STEM}_out"
+def extract_game(config, data):
+    configf = BytesIO(config)
+    assert configf.read(8) == b"EGGDATA "
+    SIZE = configf.seek(0, 2) - 32
+    configf.seek(32)
+    CHUNKS = SIZE // CHUNK_SIZE
+    decrypted_data = DUMP(EXE_NAME, configf, CHUNKS)
+    DUMP_EXTRACT(BytesIO(decrypted_data), dump_folder=dump_folder)
 
-        DUMP2_TYPE = 0
-        with open(exe_file, "rb") as f:
-            d = f.read()
-            if b"\x63\x59\x88\x18" in d:
-                DUMP2_TYPE = 1
-            elif (
-                b"\x33\x53\x93\x63\xa3\xc3\x35\x55\x95\x65\xa5\xc5\x36\x56\x96\x66" in d
-            ):
-                DUMP2_TYPE = 2
+    with open(f"{dump_folder}/CONFIG", "r", encoding="cp932") as conf_file:
+        configl = conf_file.read().splitlines()
+        config = dict(i.split("=") for i in configl)
+        print(config)
 
-        if not DUMP2_TYPE and not b"EGGDATA" in d:
-            print(
-                "This version is currently unsupported (unknown encryption).",
-                file=stderr,
-            )
-            continue
-
-        os.makedirs(dump_folder, exist_ok=True)
-        pe = pefile.PE(exe_file, fast_load=True)
-        pe.parse_data_directories(
-            directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]]
+    dataf = BytesIO(data)
+    assert dataf.read(8) == b"EGGDATA "
+    SIZE = dataf.seek(0, 2) - 32
+    dataf.seek(32)
+    CHUNKS = SIZE // CHUNK_SIZE
+    decrypted_data = DUMP(
+        EXE_NAME, dataf, CHUNKS, KEY=bytes.fromhex(config["YekTpyrc"])
+    )
+    num_disks = int(config.get("FDImages", "0"))
+    DUMP_EXTRACT(BytesIO(decrypted_data), dump_folder=dump_folder)
+    subprocess.run(
+        [
+            "python3",
+            Path(__file__).parent / "convert_fdimg.py",
+            "-d",
+            dump_folder,
+            "d88",
+        ]
+    )
+    disk_names = {}
+    for n in range(2):
+        for k in config.keys():
+            if re.search(f"FD{n}Assign\\d+Index", k):
+                disk_names[int(config[k])] = config.get(
+                    k.replace("Index", "Title"), f"Disk {int(config[k])}"
+                )
+    for n in range(num_disks):
+        disk_name = f'{EXE_STEM} - {config["EGGTitle"]} - {disk_names.get(n, f"Disk {n + 1}")}.d88'
+        print(disk_name, file=stderr)
+        subprocess.run(
+            [
+                "mv",
+                f"{dump_folder}/disk_{n}.d88",
+                disk_name,
+            ]
         )
-        for rsrc in pe.DIRECTORY_ENTRY_RESOURCE.entries:  # type: ignore
-            for entry in rsrc.directory.entries:
-                if entry.name is not None:
-                    rsrc_name = entry.name.string.decode().lower()
-                    if rsrc_name == "conf":
-                        print(
-                            "This version is currently unsupported (unknown encryption).",
-                            file=stderr,
-                        )
-                        exit(1)
-                    if rsrc_name == "config":
-                        config_offset = entry.directory.entries[
-                            0
-                        ].data.struct.OffsetToData
-                        config_size = entry.directory.entries[0].data.struct.Size
-                    elif rsrc_name == "data":
-                        data_offset = entry.directory.entries[
-                            0
-                        ].data.struct.OffsetToData
-                        data_size = entry.directory.entries[0].data.struct.Size
-                    else:
-                        print("Unknown resource:", rsrc_name)
-
-        config = pe.get_memory_mapped_image()[config_offset : config_offset + config_size]  # type: ignore
-        data = pe.get_memory_mapped_image()[data_offset : data_offset + data_size]  # type: ignore
-
-        configf = BytesIO(config)
-        assert configf.read(8) == b"EGGDATA "
-        SIZE = configf.seek(0, 2) - 32
-        configf.seek(32)
-        CHUNKS = SIZE // CHUNK_SIZE
-        decrypted_data = DUMP(EXE_NAME, configf, CHUNKS)
-        DUMP_EXTRACT(BytesIO(decrypted_data), dump_folder=dump_folder)
-
-        with open(f"{dump_folder}/CONFIG", "r", encoding="cp932") as conf_file:
-            configl = conf_file.read().splitlines()
-            config = dict(i.split("=") for i in configl)
-            print(config)
-
-        dataf = BytesIO(data)
-        assert dataf.read(8) == b"EGGDATA "
-        SIZE = dataf.seek(0, 2) - 32
-        dataf.seek(32)
-        CHUNKS = SIZE // CHUNK_SIZE
-        decrypted_data = DUMP(
-            EXE_NAME, dataf, CHUNKS, KEY=bytes.fromhex(config["YekTpyrc"])
-        )
-        num_disks = int(config.get("FDImages", "0"))
-        DUMP_EXTRACT(BytesIO(decrypted_data), dump_folder=dump_folder)
+    # if config.get("PC98_BootHD", "0") == "1" or config.get("HDImageID", False):
+    if Path(f"{dump_folder}/EGGHDIMG-INF").exists():
         subprocess.run(
             [
                 "python3",
-                Path(__file__).parent / "convert_fdimg.py",
+                Path(__file__).parent / "convert_hdimg.py",
                 "-d",
                 dump_folder,
-                "d88",
+                "hdi",
             ]
         )
-        disk_names = {}
-        for n in range(2):
-            for k in config.keys():
-                if re.search(f"FD{n}Assign\\d+Index", k):
-                    disk_names[int(config[k])] = config.get(
-                        k.replace("Index", "Title"), f"Disk {int(config[k])}"
-                    )
-        for n in range(num_disks):
-            disk_name = f'{EXE_STEM} - {config["EGGTitle"]} - {disk_names[n]}.d88'
-            print(disk_name, file=stderr)
-            subprocess.run(
-                [
-                    "mv",
-                    f"{dump_folder}/disk_{n}.d88",
-                    disk_name,
-                ]
+        hdd_name = f'{config["EGGTitle"]}.hdi'
+        print(hdd_name, file=stderr)
+        subprocess.run(
+            [
+                "mv",
+                f"{dump_folder}/EGGHDIMG.hdi",
+                hdd_name,
+            ]
+        )
+
+
+if __name__ == "__main__":
+    if len(argv) < 2:
+        EXE_STEM = "EGGCONSOLE"
+        EXE_NAME = b"GAME"
+        dump_folder = "GAME_out"
+        os.makedirs(dump_folder, exist_ok=True)
+        config = open("config.bin", "rb").read()
+        data = open("data.bin", "rb").read()
+        extract_game(config, data)
+    else:
+        for exe_file in argv[1:]:
+            EXE_STEM = Path(exe_file).stem
+            EXE_NAME = EXE_STEM.encode("utf-8")
+            dump_folder = f"{EXE_STEM}_out"
+
+            DUMP2_TYPE = 0
+            with open(exe_file, "rb") as f:
+                d = f.read()
+                if b"\x63\x59\x88\x18" in d:
+                    DUMP2_TYPE = 1
+                elif (
+                    b"\x33\x53\x93\x63\xa3\xc3\x35\x55\x95\x65\xa5\xc5\x36\x56\x96\x66"
+                    in d
+                ):
+                    DUMP2_TYPE = 2
+
+            if not DUMP2_TYPE and not b"EGGDATA" in d:
+                print(
+                    "This version is currently unsupported (unknown encryption).",
+                    file=stderr,
+                )
+                continue
+
+            os.makedirs(dump_folder, exist_ok=True)
+            pe = pefile.PE(exe_file, fast_load=True)
+            pe.parse_data_directories(
+                directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]]
             )
-        # if config.get("PC98_BootHD", "0") == "1" or config.get("HDImageID", False):
-        if Path(f"{dump_folder}/EGGHDIMG-INF").exists():
-            subprocess.run(
-                [
-                    "python3",
-                    Path(__file__).parent / "convert_hdimg.py",
-                    "-d",
-                    dump_folder,
-                    "hdi",
-                ]
-            )
-            hdd_name = f'{config["EGGTitle"]}.hdi'
-            print(hdd_name, file=stderr)
-            subprocess.run(
-                [
-                    "mv",
-                    f"{dump_folder}/EGGHDIMG.hdi",
-                    hdd_name,
-                ]
-            )
+            for rsrc in pe.DIRECTORY_ENTRY_RESOURCE.entries:  # type: ignore
+                for entry in rsrc.directory.entries:
+                    if entry.name is not None:
+                        rsrc_name = entry.name.string.decode().lower()
+                        if rsrc_name == "conf":
+                            print(
+                                "This version is currently unsupported (unknown encryption).",
+                                file=stderr,
+                            )
+                            exit(1)
+                        if rsrc_name == "config":
+                            config_offset = entry.directory.entries[
+                                0
+                            ].data.struct.OffsetToData
+                            config_size = entry.directory.entries[0].data.struct.Size
+                        elif rsrc_name == "data":
+                            data_offset = entry.directory.entries[
+                                0
+                            ].data.struct.OffsetToData
+                            data_size = entry.directory.entries[0].data.struct.Size
+                        else:
+                            print("Unknown resource:", rsrc_name)
+
+            config = pe.get_memory_mapped_image()[config_offset : config_offset + config_size]  # type: ignore
+            data = pe.get_memory_mapped_image()[data_offset : data_offset + data_size]  # type: ignore
+            extract_game(config, data)

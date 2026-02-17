@@ -1,9 +1,9 @@
-from operator import xor
 from sys import argv
 
 files = argv[1:]
 operations = {
     # ?: (b"\x33\x53\x93\x63\xa3\xc3\x35\x55\x95\x65\xa5\xc5\x36\x56\x96\x66", ?),
+    #
     0x80: (b"\x4b\x1d\x4b\xdb\x4b\xfa\x8b\xdb\x1b\xfb\xcb\x4b\x0b\xcb\xea\xdd", 4),
     0x81: (b"\xa5\x8e\xa5\xed\xa5\x7d\xc5\xed\x8d\xfd\xe5\xa5\x85\xe5\x75\xee", 3),
     # 0x82: (b"????????????????", 2),
@@ -16,7 +16,7 @@ operations = {
     # 0x89: (b"????????????????", 3),
     # 0x8A: (b"????????????????", 2),
     # 0x8B: (b"????????????????", 1),
-    # 0x8C: (b"????????????????", 4),
+    0x8C: (b"\x0b\xcb\xea\xdd\x4b\x1d\x4b\xdb\x4b\xfa\x8b\xdb\x1b\xfb\xcb\x4b", 4),
     0x8D: (b"\x85\xe5\x75\xee\xa5\x8e\xa5\xed\xa5\x7d\xc5\xed\x8d\xfd\xe5\xa5", 3),
     # 0x8E: (b"????????????????", 2),
     # 0x8F: (b"????????????????", 1),
@@ -37,6 +37,7 @@ def rotate_op(data: bytearray, shift: int) -> bytearray:
 
 
 for fn in files:
+    print(fn)
     with open(fn, "rb") as f:
         operation = f.read(1)[0]
         data = bytearray(f.read())
@@ -45,28 +46,28 @@ for fn in files:
         print(f"File {fn} is empty, skipping.")
         continue
 
-    print(data[:16].hex())
     if operation in operations and len(data) % 16 != 0:
         print(f"[WARNING] File {fn} size not divisable by 16")
         xor_key, shift = operations[operation]
     elif not operation in operations or len(data) % 16 != 0:
-        print(
-            f"Unknown operation {operation} in file {fn}, using default deobfuscation"
-        )
+        if 0x7F < operation < 0x90:
+            print(
+                f"Unknown operation {operation:#02x} in file {fn}, using default deobfuscation"
+            )
+        elif len(data) % 16 != 0:
+            print(f"Operation not specified in file {fn}, using default deobfuscation")
+        else:
+            print(f"Using default deobfuscation in file {fn} because why the fuck not")
         data = bytearray([operation]) + data
         xor_key, shift = (
-            b"\x33\x53\x93\x63\xa3\xc3\x35\x55\x95\x65\xa5\xc5\x36\x56\x96\x66",
+            b"\x4b\x1d\x4b\xdb\x4b\xfa\x8b\xdb\x1b\xfb\xcb\x4b\x0b\xcb\xea\xdd",
             4,
         )
     else:
         xor_key, shift = operations[operation]
 
     data = xor_bytes(data, xor_key)
-
-    print(data[:16].hex())
     data = rotate_op(data, shift)
-
-    print(data[:16].hex())
 
     with open(fn + ".dec", "wb") as of:
         of.write(data)

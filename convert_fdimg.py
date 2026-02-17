@@ -67,7 +67,7 @@ for disk in disks:
             tracksize = 0
             for i, sectoroff in enumerate(sectoroffs):
                 file.seek(sectoroff)
-                c, h, s, l, density, ddam, fdc_code, unk, datasize = unpack(
+                c, h, s, l, density, ddam, fdc_code, dummy, datasize = unpack(
                     "<BBBBBBBBI", file.read(12)
                 )
                 if debug:
@@ -85,8 +85,8 @@ for disk in disks:
                 if density not in [0, 1]:
                     print(f"[WARNING] Warning: Unknown density (got {density})")
 
-                if unk != 0:
-                    print(f"[WARNING] Unknown value={unk}")
+                if dummy != 0:
+                    print(f"[WARNING] Dummy value={dummy}")
 
                 if diskformat == "d88":
                     outputdata += pack(
