@@ -138,7 +138,7 @@ def extract_game(config, data):
 
     with open(f"{dump_folder}/CONFIG", "r", encoding="cp932") as conf_file:
         configl = conf_file.read().splitlines()
-        config = dict(i.split("=") for i in configl)
+        config = dict(i.split("=", 2) for i in configl if i)
         print(config)
 
     dataf = BytesIO(data)
