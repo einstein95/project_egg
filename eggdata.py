@@ -9,7 +9,9 @@ data from a Project EGG executable.
 import hashlib
 import os
 import re
+import shutil
 import subprocess
+import sys
 import zlib
 from io import BytesIO
 from pathlib import Path
@@ -95,7 +97,7 @@ def DUMP2(file: BytesIO, dump_folder: str = "out") -> None:
         # log NAME OFFSET SIZE
 
 
-def DUMP_EXTRACT(file: BytesIO, dump_folder: str = "out") -> None:
+def DUMP_EXTRACT(file: BytesIO, dump_folder: str | Path = "out") -> None:
     while True:
         type = read_dstring(file, 4)
         if type == "END":
@@ -128,12 +130,11 @@ def DUMP_EXTRACT(file: BytesIO, dump_folder: str = "out") -> None:
 
 
 def extract_game(config, data):
-    configf = BytesIO(config)
-    assert configf.read(8) == b"EGGDATA "
-    SIZE = configf.seek(0, 2) - 32
-    configf.seek(32)
+    assert config.read(8) == b"EGGDATA "
+    SIZE = config.seek(0, 2) - 32
+    config.seek(32)
     CHUNKS = SIZE // CHUNK_SIZE
-    decrypted_data = DUMP(EXE_NAME, configf, CHUNKS)
+    decrypted_data = DUMP(EXE_NAME, config, CHUNKS)
     DUMP_EXTRACT(BytesIO(decrypted_data), dump_folder=dump_folder)
 
     with open(f"{dump_folder}/CONFIG", "r", encoding="cp932") as conf_file:
@@ -141,19 +142,18 @@ def extract_game(config, data):
         config = dict(i.split("=", 2) for i in configl if i)
         print(config)
 
-    dataf = BytesIO(data)
-    assert dataf.read(8) == b"EGGDATA "
-    SIZE = dataf.seek(0, 2) - 32
-    dataf.seek(32)
+    assert data.read(8) == b"EGGDATA "
+    SIZE = data.seek(0, 2) - 32
+    data.seek(32)
     CHUNKS = SIZE // CHUNK_SIZE
-    decrypted_data = DUMP(
-        EXE_NAME, dataf, CHUNKS, KEY=bytes.fromhex(config["YekTpyrc"])
-    )
-    num_disks = int(config.get("FDImages", "0"))
+    decrypted_data = DUMP(EXE_NAME, data, CHUNKS, KEY=bytes.fromhex(config["YekTpyrc"]))
     DUMP_EXTRACT(BytesIO(decrypted_data), dump_folder=dump_folder)
+    # TODO: Add main function to convert_fdimg.py
+    # from convert_fdimg import main as convert_fdimg_main
+    # convert_fdimg_main(["-d", dump_folder, "d88"])
     subprocess.run(
         [
-            "python3",
+            sys.executable,
             Path(__file__).parent / "convert_fdimg.py",
             "-d",
             dump_folder,
@@ -161,27 +161,24 @@ def extract_game(config, data):
         ]
     )
     disk_names = {}
-    for n in range(2):
-        for k in config.keys():
-            if re.search(f"FD{n}Assign\\d+Index", k):
-                disk_names[int(config[k])] = config.get(
-                    k.replace("Index", "Title"), f"Disk {int(config[k])}"
-                )
-    for n in range(num_disks):
+    for k in config.keys():
+        if re.search(r"FD\d+Assign\d+Index", k):
+            disk_names[int(config[k])] = config.get(
+                k.replace("Index", "Title"), f"Disk {int(config[k])}"
+            )
+    for disk_file in sorted(dump_folder.glob("disk_*.d88")):
+        n = int(disk_file.stem.split("_")[1])
         disk_name = f'{EXE_STEM} - {config["EGGTitle"]} - {disk_names.get(n, f"Disk {n + 1}")}.d88'
         print(disk_name, file=stderr)
-        subprocess.run(
-            [
-                "mv",
-                f"{dump_folder}/disk_{n}.d88",
-                disk_name,
-            ]
-        )
+        shutil.move(disk_file, disk_name)
     # if config.get("PC98_BootHD", "0") == "1" or config.get("HDImageID", False):
-    if Path(f"{dump_folder}/EGGHDIMG-INF").exists():
+    if (dump_folder / "EGGHDIMG-INF").exists():
+        # TODO: Add main function to convert_hdimg.py
+        # from convert_fdimg import main as convert_hdimg_main
+        # convert_hdimg_main(["-d", dump_folder, "hdi"])
         subprocess.run(
             [
-                "python3",
+                sys.executable,
                 Path(__file__).parent / "convert_hdimg.py",
                 "-d",
                 dump_folder,
@@ -203,16 +200,16 @@ if __name__ == "__main__":
     if len(argv) < 2:
         EXE_STEM = "EGGCONSOLE"
         EXE_NAME = b"GAME"
-        dump_folder = "GAME_out"
-        os.makedirs(dump_folder, exist_ok=True)
-        config = open("config.bin", "rb").read()
-        data = open("data.bin", "rb").read()
+        dump_folder = Path("GAME_out")
+        dump_folder.mkdir(parents=True, exist_ok=True)
+        config = open("config.bin", "rb")
+        data = open("data.bin", "rb")
         extract_game(config, data)
     else:
         for exe_file in argv[1:]:
             EXE_STEM = Path(exe_file).stem
             EXE_NAME = EXE_STEM.encode("utf-8")
-            dump_folder = f"{EXE_STEM}_out"
+            dump_folder = Path(f"{EXE_STEM}_out")
 
             DUMP2_TYPE = 0
             with open(exe_file, "rb") as f:
@@ -232,7 +229,7 @@ if __name__ == "__main__":
                 )
                 continue
 
-            os.makedirs(dump_folder, exist_ok=True)
+            dump_folder.mkdir(parents=True, exist_ok=True)
             pe = pefile.PE(exe_file, fast_load=True)
             pe.parse_data_directories(
                 directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]]
@@ -262,4 +259,4 @@ if __name__ == "__main__":
 
             config = pe.get_memory_mapped_image()[config_offset : config_offset + config_size]  # type: ignore
             data = pe.get_memory_mapped_image()[data_offset : data_offset + data_size]  # type: ignore
-            extract_game(config, data)
+            extract_game(BytesIO(config), BytesIO(data))
