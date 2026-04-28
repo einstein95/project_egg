@@ -7,7 +7,6 @@ data from a Project EGG executable.
 """
 
 import hashlib
-import os
 import re
 import shutil
 import subprocess
@@ -234,6 +233,8 @@ if __name__ == "__main__":
             pe.parse_data_directories(
                 directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]]
             )
+            data_offset = None
+            config_offset = None
             for rsrc in pe.DIRECTORY_ENTRY_RESOURCE.entries:  # type: ignore
                 for entry in rsrc.directory.entries:
                     if entry.name is not None:
@@ -256,6 +257,13 @@ if __name__ == "__main__":
                             data_size = entry.directory.entries[0].data.struct.Size
                         else:
                             print("Unknown resource:", rsrc_name)
+
+            if not config_offset or not data_offset:
+                print(
+                    "This version is currently unsupported (missing resources).",
+                    file=stderr,
+                )
+                continue
 
             config = pe.get_memory_mapped_image()[config_offset : config_offset + config_size]  # type: ignore
             data = pe.get_memory_mapped_image()[data_offset : data_offset + data_size]  # type: ignore
