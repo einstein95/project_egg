@@ -42,5 +42,5 @@ with open(argv[1], "rb") as f:
     encrypted_data = f.read()
 
 decrypted_data = decrypt_resource(encrypted_data)
-with open(argv[2] or "decrypted.bin", "wb") as f:
+with open(argv[2] if len(argv) > 2 else "decrypted.bin", "wb") as f:
     f.write(decrypted_data)
